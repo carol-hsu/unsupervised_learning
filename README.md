@@ -6,6 +6,8 @@ After you pull this repo, following commands helps you installing the required p
 
 ```
 // virtual environment is recommended, but optional
-$ virtualenv venv
+$ virtualenv venv -p python3
 
-(venv) $ pip install -r requirements.txt -p python3
+(venv) $ pip install -r requirements.txt 
+
+```
