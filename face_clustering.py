@@ -1,30 +1,17 @@
-import argparse
 import pickle
+import argparse
 import cv2
 import numpy as np
-from sklearn.metrics import accuracy_score
+from sklearn.decomposition import PCA, FastICA
 from sklearn.cluster import KMeans
+from sklearn.mixture import GaussianMixture
 
-#DETECTION_METHOD="cnn"
-THE_ONE="natalie_portman"
-
-#def encode_image(image_file):
-#    # load the input image and convert it from BGR to RGB
-#    image = cv2.imread(image_file)
-#    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-#    
-#    # detect the (x, y)-coordinates of the bounding boxes corresponding
-#    # to each face in the input image, then compute the facial embeddings
-#    # for each face
-#    boxes = face_recognition.face_locations(rgb, model=DETECTION_METHOD)
-#    encodings = face_recognition.face_encodings(rgb, boxes)
-#
-#    return encodings
-
+PK_DATASET="./pickles/pk_large.pickle"
+MOM_DATASET="./pickles/mom_large.pickle"
+DIMEN_REDUCTION=["None", "PCA", "FastICA", "Randomized Projections", "FeatureAgglomeration"]
 
 def load_encodings(encoding_file):
     # load the known faces and embeddings
-    print("[INFO] loading encodings...")
     f = open(encoding_file, "rb")
     
     data = {}
@@ -40,106 +27,123 @@ def load_encodings(encoding_file):
     
         except EOFError as e:
             #bad... but workable
-            print("[INFO] Finish loading! Get "+str(len(data["names"]))+" faces ")
             break
 
     return data
 
-def option_parser(input_param):
-    #return a map of options
-    params={"max_iter": 1500, "max_clip": 10, "lrate": 10, \
-            "sched": 2, \
-            "pop_size": 100, "mut_prob": 0.4}
-    if input_param:
-        pairs = input_param.split(",")
-        for opt in pairs:
-            key_value = opt.split("=")
-            if key_value[0] in params.keys():
-                params[key_value[0]] = float(key_value[1])
-
-    return params
-        
-
 if __name__ == "__main__":
+
     # construct the argument parser and parse the arguments
     ap = argparse.ArgumentParser()
-    ap.add_argument("-i", "--input", required=True,
-            help="directory of training set/encodings of training set")
+    ap.add_argument("-p", "--procedure", default=0, type=int,
+            help="how to deal with the data: 0) clustering only\
+                                             1) dimensionality reduction then clustering \
+                                             2) dimensionality reduction only (default: 0)")
+    ap.add_argument("-n", "--components", default=100, type=int,
+            help="number of components for dimensionality reduction (default: 100)")
     params = vars(ap.parse_args())
-    
-    faces = load_encodings(params["input"])
-    X_train = faces["encodings"]
 
-#    test_faces = load_encodings(params["test"])
-#
-#    # make target to binary list
-#    X_train = faces["encodings"]
-#    X_test = test_faces["encodings"]
-#    y_train = [ 1 if y == THE_ONE else 0 for y in faces["names"] ]
-#    y_test = [ 1 if y == THE_ONE else 0 for y in test_faces["names"] ]
-#
-#    np.random.seed(1)
-#    # build neural network
-#    based_model = mlrose.NeuralNetwork(hidden_nodes = [50, 20, 8, 2], activation = "relu", \
-#                                       bias = True, is_classifier = True, early_stopping = True, \
-#                                       algorithm=algos[0], \
-#                                       max_iters=1000, max_attempts = 100, \
-#                                       learning_rate = 0.001)
-#
-#
-#    print("************** based network ***************")
-#    start_train = time.time() 
-#    based_model.fit(X_train, y_train) 
-#    print ("training time: "+str(time.time()-start_train))
-#    print("loss: "+str(based_model.loss))
-#    
-#    test_pred = based_model.predict(X_train)
-#    print("training data accuracy: "+str(accuracy_score(y_train, test_pred)*100)+"%")
-#
-#    test_pred = based_model.predict(X_test)
-#    #print(based_model.predicted_probs)
-#    print("testing data accuracy: "+str(accuracy_score(y_test, test_pred)*100)+"%")
-#
-#    # RHC
-#    opti_model = mlrose.NeuralNetwork(hidden_nodes = [50, 20, 8, 2], activation = "relu", \
-#                                      bias = True, is_classifier = True, early_stopping = True, \
-#                                      algorithm=algos[1], \
-#                                      max_iters=options["max_iter"], max_attempts=options["max_iter"]*0.1, \
-#                                      learning_rate=options["lrate"])
-#
-#    if params["optimization_algo"] == 2: # SA
-#        schedule = mlrose.GeomDecay()
-#        if options["sched"] == 1:
-#            schedule = mlrose.ArithDecay()
-#        elif options["sched"] == 2:
-#            schedule = mlrose.ExpDecay()
-#
-#        opti_model = mlrose.NeuralNetwork(hidden_nodes = [50, 20, 8, 2], activation = "relu", \
-#                                          bias = True, is_classifier = True, early_stopping = True, \
-#                                          algorithm=algos[2], \
-#                                          max_iters=options["max_iter"], max_attempts=options["max_iter"]*0.1, \
-#                                          learning_rate=options["lrate"], \
-#                                          schedule=schedule)
-#    
-#    elif params["optimization_algo"] == 3: #GA
-#        opti_model = mlrose.NeuralNetwork(hidden_nodes = [50, 20, 8, 2], activation = "relu", \
-#                                          bias = True, is_classifier = True, early_stopping = True, \
-#                                          algorithm=algos[3], \
-#                                          max_iters=options["max_iter"], max_attempts=options["max_iter"]*0.1, \
-#                                          learning_rate=options["lrate"], \
-#                                          pop_size=options["pop_size"], mutation_prob=options["mut_prob"])
-#
-#    print("************** after RO by "+algos[params["optimization_algo"]]+" ***************")
-#
-#    start_train = time.time() 
-#    opti_model.fit(X_train, y_train, based_model.fitted_weights)
-#    print ("training time: "+str(time.time()-start_train))
-#    print("loss: "+str(opti_model.loss))
-#    
-#    test_pred = opti_model.predict(X_train)
-#    print("training data accuracy: "+str(accuracy_score(y_train, test_pred)*100)+"%")
-#
-#    test_pred = opti_model.predict(X_test)
-#   # print(opti_model.predicted_probs)
-#    print("testing data accuracy: "+str(accuracy_score(y_test, test_pred)*100)+"%")
-#    
+    #load encodings and labels
+    faces = load_encodings(PK_DATASET)
+    pk_X = faces["encodings"]
+    pk_y = faces["names"]
+    pk_names = ["natalie_portman", "keira_knightley"] 
+
+    faces = load_encodings(MOM_DATASET)
+    mom_X = faces["encodings"]
+    mom_y = faces["names"]
+    mom_names = ["brigitte_lin", "michelle_yeoh", "sandra_bullock"] 
+
+    # list for putting dimension reduced data 
+    # in ordering: original data, PCA, FastICA, Randomized Projections, FeatureAgglomeration
+    pk_X_list = [pk_X] 
+    mom_X_list = [mom_X]
+
+    if params["procedure"] > 0:
+        ## PCA
+        transformed = PCA(n_components=params["components"], svd_solver='randomized', whiten=True).fit_transform(np.array(pk_X))
+        pk_X_list.append(transformed)
+
+        transformed = PCA(n_components=params["components"], svd_solver='randomized', whiten=True).fit_transform(np.array(mom_X))
+        mom_X_list.append(transformed)
+
+        ## FastICA
+        transformed = FastICA(n_components=params["components"], random_state=0, whiten=True).fit_transform(pk_X)
+        pk_X_list.append(transformed)
+
+        transformed = FastICA(n_components=params["components"], random_state=0, whiten=True).fit_transform(mom_X)
+        mom_X_list.append(transformed)
+
+        ## Randomed Projections
+
+        ## FeatureAgglomeration
+
+    if params["procedure"] < 2:
+        #K-means    
+        for x_id in range(len(pk_X_list)):
+            kmeans = KMeans(n_clusters=2, random_state=0).fit(pk_X_list[x_id])
+            pk_labels = [[],[]]
+            for idx in range(len(kmeans.labels_)):
+                pk_labels[kmeans.labels_[idx]].append(pk_y[idx])
+           
+            print("====== PK dataset K-means after {} ======".format(DIMEN_REDUCTION[x_id]))
+            for idx in range(len(pk_labels)):
+                group_size = len(pk_labels[idx])
+                print("label {id}: {name0}={cover0}% / {name1}={cover1}%".format(\
+                        id=idx, name0=pk_names[0], cover0=round(pk_labels[idx].count(pk_names[0])/group_size*100, 2),\
+                        name1=pk_names[1], cover1=round(pk_labels[idx].count(pk_names[1])/group_size*100, 2)
+                        ))
+        
+        print("")
+    
+        for x_id in range(len(mom_X_list)):
+            kmeans = KMeans(n_clusters=3, random_state=0).fit(mom_X_list[x_id])
+            mom_labels = [[],[],[]]
+            for idx in range(len(kmeans.labels_)):
+                mom_labels[kmeans.labels_[idx]].append(mom_y[idx])
+        
+            print("====== Mom dataset K-means after {} ======".format(DIMEN_REDUCTION[x_id]))
+            for idx in range(len(mom_labels)):
+                group_size = len(mom_labels[idx])
+                print("label {id}: {name0}={cover0}% / {name1}={cover1}% / {name2}={cover2}%".format(\
+                        id=idx, name0=mom_names[0], cover0=round(mom_labels[idx].count(mom_names[0])/group_size*100, 2),\
+                        name1=mom_names[1], cover1=round(mom_labels[idx].count(mom_names[1])/group_size*100, 2),\
+                        name2=mom_names[2], cover2=round(mom_labels[idx].count(mom_names[2])/group_size*100, 2)
+                        ))
+    
+        print("")
+    
+        #EM: Gaussian mixture models
+
+        for x_id in range(len(pk_X_list)):
+            em = GaussianMixture(n_components=2, covariance_type='full', random_state=0).fit(pk_X_list[x_id])
+            pk_predict_y = em.predict(pk_X_list[x_id])
+            pk_labels = [[],[]]
+            for idx in range(len(pk_predict_y)):
+                pk_labels[pk_predict_y[idx]].append(pk_y[idx])
+        
+            print("====== PK dataset EM after {} ======".format(DIMEN_REDUCTION[x_id]))
+            for idx in range(len(pk_labels)):
+                group_size = len(pk_labels[idx])
+                print("label {id}: {name0}={cover0}% / {name1}={cover1}%".format(\
+                        id=idx, name0=pk_names[0], cover0=round(pk_labels[idx].count(pk_names[0])/group_size*100, 2),\
+                        name1=pk_names[1], cover1=round(pk_labels[idx].count(pk_names[1])/group_size*100, 2)
+                        ))
+    
+        for x_id in range(len(mom_X_list)):
+            em = GaussianMixture(n_components=3, covariance_type='full', random_state=0).fit(mom_X_list[x_id])
+            mom_predict_y = em.predict(mom_X_list[x_id])
+            mom_labels = [[],[],[]]
+            for idx in range(len(mom_predict_y)):
+                mom_labels[mom_predict_y[idx]].append(mom_y[idx])
+        
+            print("====== Mom dataset EM after {} ======".format(DIMEN_REDUCTION[x_id]))
+            for idx in range(len(mom_labels)):
+                group_size = len(mom_labels[idx])
+                print("label {id}: {name0}={cover0}% / {name1}={cover1}% / {name2}={cover2}%".format(\
+                        id=idx, name0=mom_names[0], cover0=round(mom_labels[idx].count(mom_names[0])/group_size*100, 2),\
+                        name1=mom_names[1], cover1=round(mom_labels[idx].count(mom_names[1])/group_size*100, 2),\
+                        name2=mom_names[2], cover2=round(mom_labels[idx].count(mom_names[2])/group_size*100, 2)
+                        ))
+    
+
