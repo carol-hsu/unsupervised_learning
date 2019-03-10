@@ -3,12 +3,13 @@ import argparse
 import cv2
 import numpy as np
 from sklearn.decomposition import PCA, FastICA
-from sklearn.cluster import KMeans
+from sklearn.random_projection import GaussianRandomProjection 
+from sklearn.cluster import KMeans, FeatureAgglomeration
 from sklearn.mixture import GaussianMixture
 
 PK_DATASET="./pickles/pk_large.pickle"
 MOM_DATASET="./pickles/mom_large.pickle"
-DIMEN_REDUCTION=["None", "PCA", "FastICA", "Randomized Projections", "FeatureAgglomeration"]
+DIMEN_REDUCTION=["None", "PCA", "FastICA", "GaussianRandomProjection", "FeatureAgglomeration"]
 
 def load_encodings(encoding_file):
     # load the known faces and embeddings
@@ -36,9 +37,9 @@ if __name__ == "__main__":
     # construct the argument parser and parse the arguments
     ap = argparse.ArgumentParser()
     ap.add_argument("-p", "--procedure", default=0, type=int,
-            help="how to deal with the data: 0) clustering only\
-                                             1) dimensionality reduction then clustering \
-                                             2) dimensionality reduction only (default: 0)")
+            help="Processing data by: [0]clustering only \
+                                      [1]dimensionality reduction then clustering \
+                                      [2]dimensionality reduction only (default: 0)")
     ap.add_argument("-n", "--components", default=100, type=int,
             help="number of components for dimensionality reduction (default: 100)")
     params = vars(ap.parse_args())
@@ -75,8 +76,18 @@ if __name__ == "__main__":
         mom_X_list.append(transformed)
 
         ## Randomed Projections
+        transformed = GaussianRandomProjection(n_components=params["components"], random_state=0).fit_transform(pk_X)
+        pk_X_list.append(transformed)
+    
+        transformed = GaussianRandomProjection(n_components=params["components"], random_state=0).fit_transform(mom_X)
+        mom_X_list.append(transformed)
 
         ## FeatureAgglomeration
+        transformed = FeatureAgglomeration(n_clusters=2).fit_transform(pk_X)
+        pk_X_list.append(transformed)
+
+        transformed = FeatureAgglomeration(n_clusters=2).fit_transform(mom_X)
+        mom_X_list.append(transformed)
 
     if params["procedure"] < 2:
         #K-means    
@@ -129,7 +140,9 @@ if __name__ == "__main__":
                         id=idx, name0=pk_names[0], cover0=round(pk_labels[idx].count(pk_names[0])/group_size*100, 2),\
                         name1=pk_names[1], cover1=round(pk_labels[idx].count(pk_names[1])/group_size*100, 2)
                         ))
-    
+        
+        print("")
+
         for x_id in range(len(mom_X_list)):
             em = GaussianMixture(n_components=3, covariance_type='full', random_state=0).fit(mom_X_list[x_id])
             mom_predict_y = em.predict(mom_X_list[x_id])
