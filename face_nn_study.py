@@ -38,84 +38,93 @@ def load_encodings(encoding_file):
 
     return data
 
-def train_and_validate(model, X, y):
+def train_and_validate(X, y, X_t, y_t):
+    model = mlrose.NeuralNetwork(hidden_nodes = [50, 20, 8, 2], activation = "relu", \
+                                 bias = True, is_classifier = True, early_stopping = True, \
+                                 algorithm="gradient_descent", \
+                                 max_iters=1000, max_attempts = 100, learning_rate = 0.001)
     start_train = time.time()
     model.fit(X, y)
     print ("training time: "+str(time.time()-start_train))
     print("loss: "+str(model.loss))
 
-    test_pred = model.predict(X)
-    print("training data accuracy: "+str(round(accuracy_score(y, test_pred)*100,2))+"%")
+    pred = model.predict(X)
+    print("training data accuracy: "+str(round(accuracy_score(y, pred)*100,2))+"%")
+    
+    test_pred = model.predict(X_t)
+    print("testing data accuracy: "+str(round(accuracy_score(y_t, test_pred)*100,2))+"%")
+    
+
 
 if __name__ == "__main__":
     # construct the argument parser and parse the arguments
     ap = argparse.ArgumentParser()
-    ap.add_argument("-p", "--procedure", default=0, type=int,
-            help="Processing data by: [0]dimensionality reduction only \
-                                      [1]dimensionality reduction then clustering (default: 0)")
-    ap.add_argument("-c", "--components", default=100, type=int,
-            help="number of components for dimensionality reduction (default: 100)")
-    ap.add_argument("-n", "--clusters", default=100, type=int,
-            help="number of clusters for clustering (default: 100)")
+    ap.add_argument("-c", "--components", default=2, type=int,
+            help="number of components for dimensionality reduction (default: 2)")
+    ap.add_argument("-n", "--clusters", default=2, type=int,
+            help="number of clusters for clustering (default: 2)")
     params = vars(ap.parse_args())
 
 
     faces = load_encodings(TRAIN_DATASET)
-#    test_faces = load_encodings(TEST_DATASET)
+    test_faces = load_encodings(TEST_DATASET)
 
     # make target to binary list
     X_train = faces["encodings"]
-#    X_test = test_faces["encodings"]
+    X_test = test_faces["encodings"]
     y_train = faces["names"]
-#    y_test = test_faces["names"]
+    y_test = test_faces["names"]
     y_train = [ 1 if y == THE_ONE else 0 for y in faces["names"] ]
- #   y_test = [ 1 if y == THE_ONE else 0 for y in test_faces["names"] ]
+    y_test = [ 1 if y == THE_ONE else 0 for y in test_faces["names"] ]
 
     np.random.seed(1)
     # build neural network
-    based_model = mlrose.NeuralNetwork(hidden_nodes = [50, 20, 8, 2], activation = "relu", \
-                                       bias = True, is_classifier = True, early_stopping = True, \
-                                       algorithm="gradient_descent", \
-                                       max_iters=1000, max_attempts = 100, \
-                                       learning_rate = 0.001)
 
     print("************** based network ***************")
-    train_and_validate(based_model, X_train, y_train)
+    train_and_validate(X_train, y_train, X_test, y_test)
 
     X_list = []
+    X_test_list = []
+
     ## PCA
-    transformed = PCA(n_components=params["components"], svd_solver='randomized', whiten=True).fit_transform(np.array(X_train))
-    X_list.append(transformed)
+    model = PCA(n_components=params["components"], svd_solver='randomized', whiten=True)
+    X_list.append(model.fit_transform(np.array(X_train)))
+    X_test_list.append(model.fit_transform(np.array(X_test)))
 
     ## FastICA
-    transformed = FastICA(n_components=params["components"], random_state=0, whiten=True).fit_transform(X_train)
-    X_list.append(transformed)
+    model = FastICA(n_components=params["components"], random_state=0, whiten=True)
+    X_list.append(model.fit_transform(X_train))
+    X_test_list.append(model.fit_transform(X_test))
 
     ## Randomed Projections
-    transformed = GaussianRandomProjection(n_components=params["components"], random_state=0).fit_transform(X_train)
-    X_list.append(transformed)
+    model = GaussianRandomProjection(n_components=params["components"], random_state=0)
+    X_list.append(model.fit_transform(X_train))
+    X_test_list.append(model.fit_transform(X_test))
 
     ## FeatureAgglomeration 
-    transformed = FeatureAgglomeration(n_clusters=2).fit_transform(X_train)
-    X_list.append(transformed)
+    model = FeatureAgglomeration(n_clusters=params["components"])
+    X_list.append(model.fit_transform(X_train))
+    X_test_list.append(model.fit_transform(X_test))
 
     for idx in range(4):
         print("************** network with {} ***************".format(DIMEN_REDUCTION[idx]))
-        train_and_validate(based_model, X_list[idx], y_train)
+        train_and_validate(X_list[idx], y_train, X_test_list[idx], y_test)
 
-    if params["procedure"] >= 1:
-        for idx in range(4):
-            print("************** network with K-means after {} ***************".format(DIMEN_REDUCTION[idx]))
-            kmeans = KMeans(n_clusters=params["clusters"], random_state=0).fit(X_list[idx])
-            #single_attr_X = [ [x] for x in kmeans.labels_ ]
-            multi_attr_X = [ X_list[idx][i]+[kmeans.labels_[i]] for i in range(len(kmeans.labels_)) ]
-            #train_and_validate(based_model, single_attr_X, y_train)
-            train_and_validate(based_model, multi_attr_X, y_train)
-
-            print("************** network with EM after {} ***************".format(DIMEN_REDUCTION[idx]))
-            em = GaussianMixture(n_components=params["clusters"], covariance_type='full', random_state=0).fit(X_list[idx])
-            labels = em.predict(X_list[idx])
-            multi_attr_X = [ X_list[idx][i]+[labels[i]] for i in range(len(labels)) ]
-            train_and_validate(based_model, multi_attr_X, y_train)
+    for idx in range(4):
+        print("************** network with K-means after {} ***************".format(DIMEN_REDUCTION[idx]))
+        kmeans = KMeans(n_clusters=params["clusters"], random_state=0, copy_x=True)
+        X_pred = kmeans.fit_predict(X_list[idx])
+        X_test_pred = kmeans.fit_predict(X_test_list[idx])
+        multi_attr_X = [ X_list[idx][i]+[X_pred[i]] for i in range(len(X_pred)) ]
+        multi_attr_X_test = [ X_test_list[idx][i]+[X_test_pred[i]] for i in range(len(X_test_pred)) ]
+        train_and_validate(multi_attr_X, y_train, multi_attr_X_test, y_test)
+ 
+        print("************** network with EM after {} ***************".format(DIMEN_REDUCTION[idx]))
+        em = GaussianMixture(n_components=params["clusters"], covariance_type='full', random_state=0)
+        X_pred = em.fit_predict(X_list[idx])
+        X_test_pred = em.fit_predict(X_test_list[idx])
+        multi_attr_X = [ X_list[idx][i]+[X_pred[i]] for i in range(len(X_pred)) ]
+        multi_attr_X_test = [ X_test_list[idx][i]+[X_test_pred[i]] for i in range(len(X_test_pred)) ]
+        train_and_validate(multi_attr_X, y_train, multi_attr_X_test, y_test)
 
 
