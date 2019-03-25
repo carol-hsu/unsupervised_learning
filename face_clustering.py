@@ -61,6 +61,8 @@ if __name__ == "__main__":
             help="Number of clusters for clustering (default: 2)")
     ap.add_argument("-o", "--output", action="store_true",
             help="Showing the projected features")
+    ap.add_argument("-r", "--random-seed", default=0, type=int,
+            help="random seed for random projection")
     params = vars(ap.parse_args())
     show_space = True
 
@@ -92,7 +94,7 @@ if __name__ == "__main__":
         X_list.append(transformed)
 
         ## Randomed Projections
-        transformed = GaussianRandomProjection(n_components=params["components"], random_state=0).fit_transform(X)
+        transformed = GaussianRandomProjection(n_components=params["components"], random_state=params["random_seed"]).fit_transform(X)
         X_list.append(transformed)
     
         ## FeatureAgglomeration
@@ -126,6 +128,7 @@ if __name__ == "__main__":
            
             print("====== dataset {} with K-means after {} ======".format(params["dataset"],DIMEN_REDUCTION[x_id]))
             print_outputs(labels, ds_size, names)
+            print("inertia: "+str(kmeans.inertia_))
             print("")
 
         print("")
